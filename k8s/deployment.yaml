@@ -31,10 +31,9 @@ spec:
 
       containers:
         - name: kvstore
-          # Build locally: docker build -t kvstore:latest ./app
-          # Then load into cluster nodes (see README).
-          image: kvstore:latest
-          imagePullPolicy: IfNotPresent   # use local image; change to Always if using a registry
+          # Push with: bash scripts/build-and-push.sh
+          image: terminus.lan.local.cmu.edu:5000/kvstore:latest
+          imagePullPolicy: Always    # always pull from registry
 
           ports:
             - name: http
