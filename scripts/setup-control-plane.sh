@@ -155,20 +155,19 @@ case "${PKG_MGR}" in
     dnf) install_prerequisites_dnf ;;
 esac
 
-# ── 2. Disable swap (required by kubelet) ────────────────────────────────────
-info "Step 2/9 — Disabling swap..."
-swapoff -a || true
-# Ubuntu: comment out swap in fstab
-sed -i '/\sswap\s/s/^/#/' /etc/fstab 2>/dev/null || true
-# Fedora: also handle zram-based swap
-if [[ "${OS_ID}" == "fedora" ]]; then
-    systemctl disable --now zram-generator-defaults.target 2>/dev/null || true
-    systemctl stop dev-zram0.swap 2>/dev/null || true
-    # Remove zram-generator config if present
-    rm -f /etc/systemd/zram-generator.conf 2>/dev/null || true
-    if [[ -d /usr/lib/systemd/zram-generator.conf.d ]]; then
-        rm -f /usr/lib/systemd/zram-generator.conf.d/*.conf 2>/dev/null || true
-    fi
+# ── 2. Configure kubelet to tolerate swap ─────────────────────────────────────
+info "Step 2/9 — Configuring kubelet to allow swap..."
+mkdir -p /etc/default
+# Tell kubelet not to fail if swap is on (--fail-swap-on=false)
+cat <<EOF > /var/lib/kubelet/config-patches.yaml
+failSwapOn: false
+EOF
+# Also set via environment for older kubelet versions
+if [[ -f /etc/default/kubelet ]]; then
+    grep -q 'fail-swap-on' /etc/default/kubelet || \
+        echo 'KUBELET_EXTRA_ARGS="--fail-swap-on=false"' >> /etc/default/kubelet
+else
+    echo 'KUBELET_EXTRA_ARGS="--fail-swap-on=false"' > /etc/default/kubelet
 fi
 
 # ── 3. Load kernel modules ───────────────────────────────────────────────────
