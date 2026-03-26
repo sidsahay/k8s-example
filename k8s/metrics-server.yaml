@@ -68,7 +68,7 @@ metadata:
   name: metrics-server:system:auth-delegator
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRoleBinding
+  kind: ClusterRole
   name: system:auth-delegator
 subjects:
   - kind: ServiceAccount

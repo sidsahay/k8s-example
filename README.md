@@ -116,6 +116,8 @@ imagePullPolicy: Always
 
 ### 4. Install metrics-server (required for HPA)
 
+> Run all remaining `kubectl` commands on the **control-plane node** (or any machine with a valid kubeconfig).
+
 ```bash
 kubectl apply -f k8s/metrics-server.yaml
 # Wait ~60s, then verify:
@@ -123,6 +125,8 @@ kubectl top nodes
 ```
 
 ### 5. Deploy the kvstore
+
+Still on the **control-plane node**:
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
