@@ -1,0 +1,38 @@
+---
+# ClusterIP — internal service-to-service traffic
+apiVersion: v1
+kind: Service
+metadata:
+  name: kvstore
+  namespace: kvstore
+  labels:
+    app: kvstore
+spec:
+  type: ClusterIP
+  selector:
+    app: kvstore
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+      protocol: TCP
+
+---
+# NodePort — external access for testing / load generator running outside cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: kvstore-nodeport
+  namespace: kvstore
+  labels:
+    app: kvstore
+spec:
+  type: NodePort
+  selector:
+    app: kvstore
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+      nodePort: 30000   # Access via http://<any-node-ip>:30000
+      protocol: TCP

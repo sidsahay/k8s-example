@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kvstore
+  labels:
+    app.kubernetes.io/name: kvstore
+    app.kubernetes.io/managed-by: kubectl

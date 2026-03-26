@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-generator
+  namespace: kvstore
+  labels:
+    app: load-generator
+spec:
+  # Will not restart on failure — just re-apply to re-run
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: load-generator
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: load-generator
+          # Same Python slim image — no extra deps needed (stdlib only)
+          image: python:3.11-slim
+          command:
+            - python
+            - /load_gen.py
+          env:
+            - name: TARGET_URL
+              value: "http://kvstore.kvstore.svc.cluster.local:5000"
+            - name: RPS
+              value: "50"       # 50 requests/sec — enough to saturate 1-2 pods
+            - name: DURATION
+              value: "120"      # Run for 2 minutes then finish
+          volumeMounts:
+            - name: script
+              mountPath: /load_gen.py
+              subPath: load_gen.py
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
+      volumes:
+        - name: script
+          configMap:
+            name: load-generator-script
+
+---
+# Store the load generator script as a ConfigMap so we can
+# mount it into the pod without building a custom image.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: load-generator-script
+  namespace: kvstore
+  labels:
+    app: load-generator
+binaryData: {}
+# NOTE: The actual script content is injected at deploy time.
+# Run:  kubectl create configmap load-generator-script \
+#         --from-file=load_gen.py=load-generator/load_gen.py \
+#         -n kvstore --dry-run=client -o yaml | kubectl apply -f -
+# Then: kubectl apply -f k8s/load-generator-job.yaml
+#
+# Or use the helper script:  ./scripts/run-load-test.sh

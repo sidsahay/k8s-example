@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kvstore
+  namespace: kvstore
+  labels:
+    app: kvstore
+    version: "1.0"
+spec:
+  # HPA will manage replica count — start with 1
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kvstore
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: kvstore
+        version: "1.0"
+    spec:
+      # ── Security context ──────────────────────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: kvstore
+          # Build locally: docker build -t kvstore:latest ./app
+          # Then load into cluster nodes (see README).
+          image: kvstore:latest
+          imagePullPolicy: IfNotPresent   # use local image; change to Always if using a registry
+
+          ports:
+            - name: http
+              containerPort: 5000
+              protocol: TCP
+
+          # ── Environment from ConfigMap ──────────────────────────────────
+          envFrom:
+            - configMapRef:
+                name: kvstore-config
+
+          # ── Resource requests/limits (HPA reads requests) ───────────────
+          resources:
+            requests:
+              cpu: "100m"       # 0.10 vCPU baseline
+              memory: "128Mi"
+            limits:
+              cpu: "500m"       # 0.50 vCPU max per pod
+              memory: "256Mi"
+
+          # ── Health probes ───────────────────────────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 2
+
+      # Spread pods across nodes for resilience
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: kvstore
