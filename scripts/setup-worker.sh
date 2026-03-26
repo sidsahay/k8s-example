@@ -201,7 +201,7 @@ esac
 
 # ── 2. Configure kubelet to tolerate swap ─────────────────────────────────────
 info "Step 2/8 — Configuring kubelet to allow swap..."
-mkdir -p /etc/default
+mkdir -p /etc/default /var/lib/kubelet
 cat <<EOF > /var/lib/kubelet/config-patches.yaml
 failSwapOn: false
 EOF
