@@ -79,11 +79,37 @@ detect_os
 info "Joining cluster at ${MASTER_IP} ..."
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Helper: wait for apt lock (Ubuntu's unattended-upgrades can hold it)
+# ══════════════════════════════════════════════════════════════════════════════
+
+wait_for_apt_lock() {
+    local max_wait=120
+    local waited=0
+    while fuser /var/lib/dpkg/lock-frontend &>/dev/null || \
+          fuser /var/lib/dpkg/lock &>/dev/null || \
+          fuser /var/lib/apt/lists/lock &>/dev/null; do
+        if [[ $waited -eq 0 ]]; then
+            warn "Waiting for apt lock (another process like unattended-upgrades is running)..."
+        fi
+        sleep 5
+        waited=$((waited + 5))
+        if [[ $waited -ge $max_wait ]]; then
+            error "Timed out after ${max_wait}s waiting for apt lock. Kill the holding process or try again."
+        fi
+    done
+    if [[ $waited -gt 0 ]]; then
+        info "apt lock released after ~${waited}s"
+    fi
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Helper: package install functions (same as setup-control-plane.sh)
 # ══════════════════════════════════════════════════════════════════════════════
 
 install_prerequisites_apt() {
+    wait_for_apt_lock
     apt-get update -qq
+    wait_for_apt_lock
     apt-get install -y -qq \
         apt-transport-https \
         ca-certificates \
@@ -116,7 +142,9 @@ install_containerd_apt() {
         https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
         > /etc/apt/sources.list.d/docker.list
 
+    wait_for_apt_lock
     apt-get update -qq
+    wait_for_apt_lock
     apt-get install -y -qq containerd.io
 }
 
@@ -136,7 +164,9 @@ install_k8s_apt() {
         https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/ /" \
         > /etc/apt/sources.list.d/kubernetes.list
 
+    wait_for_apt_lock
     apt-get update -qq
+    wait_for_apt_lock
     apt-get install -y -qq kubelet kubeadm kubectl
     apt-mark hold kubelet kubeadm kubectl
 }
