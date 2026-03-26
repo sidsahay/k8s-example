@@ -96,7 +96,59 @@ worker-02      Ready    <none>          2m    v1.30.x
 
 ---
 
-## Step 4 — Run the Load Test
+## Step 4 — Set Up the Local Docker Registry
+
+A private Docker registry on the control-plane node lets all cluster nodes pull images without manual file copying.
+
+### 4a. Start the registry (control-plane node)
+
+```bash
+sudo bash setup-registry.sh
+```
+
+This will:
+1. Create persistent storage at `/bucket/docker-registry`
+2. Start a `registry:2` container on port **5000** (`--restart=always`)
+3. Configure **containerd** and **Docker** to trust the insecure registry
+4. Open port 5000 in `ufw` (if present)
+5. Verify the registry is reachable at `http://terminus.lan.local.cmu.edu:5000/v2/`
+
+### 4b. Configure worker nodes
+
+Run on **each worker node** so it can pull images from the registry:
+
+```bash
+sudo bash configure-registry-client.sh
+```
+
+The script:
+1. Writes a containerd hosts config at `/etc/containerd/certs.d/terminus.lan.local.cmu.edu:5000/hosts.toml`
+2. Adds `config_path` to `/etc/containerd/config.toml` if not already present
+3. Configures Docker `insecure-registries` (if Docker is installed)
+4. Restarts containerd (and Docker)
+5. Optionally test-pulls `kvstore:latest` via `crictl`
+
+### 4c. Build and push the kvstore image
+
+From the project root (or anywhere — the script locates the Dockerfile automatically):
+
+```bash
+bash build-and-push.sh            # pushes kvstore:latest
+bash build-and-push.sh v1.2       # pushes kvstore:v1.2
+```
+
+The image is pushed to `terminus.lan.local.cmu.edu:5000/kvstore:<tag>`.
+
+> [!NOTE]
+> Make sure `k8s/deployment.yaml` references the registry image and uses `imagePullPolicy: Always`:
+> ```yaml
+> image: terminus.lan.local.cmu.edu:5000/kvstore:latest
+> imagePullPolicy: Always
+> ```
+
+---
+
+## Step 5 — Run the Load Test
 
 From the project root (requires `kubectl` configured and kvstore deployed):
 

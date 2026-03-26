@@ -43,9 +43,14 @@ k8s-example/
 │   ├── metrics-server.yaml
 │   └── load-generator-job.yaml
 └── scripts/
-    ├── setup-control-plane.sh # Bootstrap control-plane node
-    ├── setup-worker.sh    # Join worker nodes
-    ├── run-load-test.sh   # Deploy load generator + watch HPA
+    ├── setup-control-plane.sh     # Bootstrap control-plane node
+    ├── setup-worker.sh            # Join worker nodes
+    ├── setup-registry.sh          # Run a local Docker registry on the control-plane
+    ├── configure-registry-client.sh # Configure worker nodes to pull from the registry
+    ├── build-and-push.sh          # Build the kvstore image and push to the registry
+    ├── open-ports-control-plane.sh
+    ├── open-ports-worker.sh
+    ├── run-load-test.sh           # Deploy load generator + watch HPA
     └── README.md
 ```
 
@@ -76,22 +81,40 @@ Verify:
 kubectl get nodes    # All nodes should be Ready
 ```
 
-### 2. Build and load the kvstore image
+### 2. Set up the local Docker registry
 
+A private registry on the control-plane node lets you push once and pull from every node — no manual `docker save / scp` required.
+
+**On the control-plane node:**
 ```bash
-docker build -t kvstore:latest ./app
-
-# For each node in your cluster (bare-metal, no registry):
-docker save kvstore:latest | ssh <node-user>@<node-ip> 'docker load'
-# OR if using containerd directly:
-docker save kvstore:latest -o /tmp/kvstore.tar
-ctr -n k8s.io images import /tmp/kvstore.tar   # run on each node
+sudo bash scripts/setup-registry.sh
 ```
 
-> **Using a registry?** Push with `docker tag kvstore:latest <registry>/kvstore:latest && docker push ...`
-> then update `image:` in `k8s/deployment.yaml` and set `imagePullPolicy: Always`.
+This starts a `registry:2` container on port **5000**, backed by `/bucket/docker-registry`, and configures both containerd and Docker to trust it.
 
-### 3. Install metrics-server (required for HPA)
+**On each worker node:**
+```bash
+sudo bash scripts/configure-registry-client.sh
+```
+
+This configures containerd (and Docker if present) to pull from `terminus.lan.local.cmu.edu:5000` as an insecure registry.
+
+### 3. Build and push the kvstore image
+
+From the project root (on any machine that has Docker and can reach the registry):
+
+```bash
+bash scripts/build-and-push.sh          # pushes kvstore:latest
+bash scripts/build-and-push.sh v1.2      # pushes kvstore:v1.2
+```
+
+Then update `k8s/deployment.yaml`:
+```yaml
+image: terminus.lan.local.cmu.edu:5000/kvstore:latest
+imagePullPolicy: Always
+```
+
+### 4. Install metrics-server (required for HPA)
 
 ```bash
 kubectl apply -f k8s/metrics-server.yaml
@@ -99,7 +122,7 @@ kubectl apply -f k8s/metrics-server.yaml
 kubectl top nodes
 ```
 
-### 4. Deploy the kvstore
+### 5. Deploy the kvstore
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
@@ -115,7 +138,7 @@ kubectl get all -n kvstore
 kubectl get hpa -n kvstore
 ```
 
-### 5. Test the service manually
+### 6. Test the service manually
 
 ```bash
 # Get any node's IP
@@ -136,7 +159,7 @@ curl http://${NODE_IP}:30000/keys
 curl http://${NODE_IP}:30000/health
 ```
 
-### 6. Run the load test and watch HPA scale up
+### 7. Run the load test and watch HPA scale up
 
 ```bash
 bash scripts/run-load-test.sh
